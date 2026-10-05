@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CapturedBy</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{font-family:'Inter',sans-serif;background:#0a0a0c}
+.leaflet-container{background:#18181b}
+.inp{width:100%;padding:.55rem .75rem;font-size:.8rem;background:#18181b;border:1px solid #27272a;border-radius:.6rem;color:#fafafa;outline:none}
+.inp:focus{border-color:#a1a1aa}
+.spin{animation:s 1s linear infinite}@keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body class="text-zinc-100 min-h-screen">
+
+<header class="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur border-b border-zinc-800">
+  <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+    <div><h1 class="font-bold tracking-tight">CapturedBy</h1><p class="text-[11px] text-zinc-500">찍으면 도감이 된다</p></div>
+    <button id="menuBtn" class="text-xs text-zinc-400 border border-zinc-800 rounded-lg px-3 py-1.5 hover:text-white">설정 · 데이터</button>
+  </div>
+</header>
+
+<main class="max-w-md mx-auto px-4 pt-4 pb-28">
+  <section id="tab-list" class="space-y-4">
+    <div class="rounded-2xl bg-zinc-900 border border-zinc-800 p-4 flex justify-between items-center">
+      <div><p class="text-[11px] text-zinc-500">수집한 발견물</p><p id="total" class="text-2xl font-bold">0개</p></div>
+      <p id="topCat" class="text-xs text-zinc-400"></p>
+    </div>
+    <div id="chips" class="flex gap-2 overflow-x-auto pb-1"></div>
+    <div id="grid" class="grid grid-cols-2 gap-3"></div>
+    <p id="empty" class="hidden text-center text-zinc-500 text-sm py-16">아래 + 버튼으로 사진을 찍어보세요</p>
+  </section>
+  <section id="tab-map" class="hidden">
+    <div id="mainMap" class="w-full rounded-2xl border border-zinc-800 overflow-hidden" style="height:70vh"></div>
+  </section>
+</main>
+
+<nav class="fixed bottom-0 inset-x-0 z-40 bg-zinc-950 border-t border-zinc-800">
+  <div class="max-w-md mx-auto grid grid-cols-3 h-16 items-center text-[11px]">
+    <button data-tab="tab-list" class="nav text-white">도감</button>
+    <label class="flex justify-center cursor-pointer">
+      <span class="w-12 h-12 -mt-6 rounded-full bg-white text-black flex items-center justify-center text-2xl font-light shadow-lg">+</span>
+      <input id="cam" type="file" accept="image/*" capture="environment" class="hidden">
+    </label>
+    <button data-tab="tab-map" class="nav text-zinc-500">지도</button>
+  </div>
+</nav>
+
+<div id="detail" class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+  <div class="bg-zinc-900 border border-zinc-800 w-full max-w-sm rounded-2xl overflow-hidden max-h-[88vh] flex flex-col">
+    <div class="relative h-56 bg-black shrink-0">
+      <img id="dImg" class="w-full h-full object-cover">
+      <button id="dClose" class="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60">✕</button>
+      <span id="dRar" class="absolute bottom-3 left-3 text-xs font-bold px-2.5 py-1 rounded-lg"></span>
+    </div>
+    <div class="p-4 space-y-3 overflow-y-auto">
+      <div><span id="dCat" class="text-[11px] text-zinc-500"></span><h3 id="dName" class="text-lg font-bold"></h3></div>
+      <div class="grid grid-cols-2 gap-2 text-xs bg-zinc-950 border border-zinc-800 rounded-xl p-3">
+        <div><p class="text-zinc-500 text-[10px]">추정 가치</p><p id="dPrice"></p></div>
+        <div><p class="text-zinc-500 text-[10px]">발견 일시</p><p id="dDate"></p></div>
+      </div>
+      <p id="dDesc" class="text-xs text-zinc-400 leading-relaxed bg-zinc-950 border border-zinc-800 rounded-xl p-3"></p>
+      <p id="dLoc" class="text-[11px] font-mono text-zinc-500"></p>
+      <div class="grid grid-cols-3 gap-2">
+        <button id="dShare" class="py-2.5 rounded-xl bg-zinc-800 text-xs font-semibold">공유</button>
+        <button id="dEdit" class="py-2.5 rounded-xl bg-white text-black text-xs font-semibold">수정</button>
+        <button id="dDel" class="py-2.5 rounded-xl bg-zinc-800 text-red-400 text-xs font-semibold">삭제</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="editor" class="hidden fixed inset-0 z-[60] bg-black/80 flex items-end sm:items-center justify-center">
+  <div class="bg-zinc-900 border border-zinc-800 w-full max-w-sm rounded-t-2xl sm:rounded-2xl max-h-[92vh] overflow-y-auto p-4 space-y-3">
+    <div class="flex justify-between items-center"><h2 id="eTitle" class="font-bold text-sm">새 발견물</h2><button id="eClose" class="text-zinc-500">✕</button></div>
+    <img id="ePrev" class="w-full h-44 object-cover rounded-xl bg-black">
+    <div id="eStatus" class="text-xs text-zinc-400 flex items-center gap-2"></div>
+    <div><label class="text-[11px] text-zinc-500">이름</label><input id="eName" class="inp"></div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="text-[11px] text-zinc-500">카테고리</label>
+        <select id="eCat" class="inp"><option>자동차</option><option>건물</option><option>식물</option><option>음식</option><option>물건</option><option>기타</option></select></div>
+      <div><label class="text-[11px] text-zinc-500">티어</label>
+        <select id="eRar" class="inp"><option value="C">C · 흔함</option><option value="B">B · 보통</option><option value="A">A · 우수</option><option value="S">S · 희귀</option><option value="R">R · 전설</option></select></div>
+    </div>
+    <div><label class="text-[11px] text-zinc-500">추정 가치</label><input id="ePrice" class="inp"></div>
+    <div><label class="text-[11px] text-zinc-500">설명</label><textarea id="eDesc" rows="3" class="inp resize-none"></textarea></div>
+    <div class="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs">
+      <span class="text-zinc-400">📍 <span id="eLoc"></span></span>
+      <button id="eLocBtn" class="text-white font-semibold underline">위치 변경</button>
+    </div>
+    <div class="grid grid-cols-3 gap-2">
+      <button id="eRe" class="py-2.5 rounded-xl bg-zinc-800 text-xs">AI 재분석</button>
+      <button id="eSave" class="col-span-2 py-2.5 rounded-xl bg-white text-black text-xs font-semibold">저장</button>
+    </div>
+  </div>
+</div>
+
+<div id="picker" class="hidden fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-3 space-y-2">
+    <p class="text-xs text-zinc-400">지도를 탭해서 위치를 지정하세요</p>
+    <div id="pickMap" class="rounded-xl overflow-hidden" style="height:50vh"></div>
+    <div class="grid grid-cols-3 gap-2">
+      <button id="pGps" class="py-2 rounded-lg bg-zinc-800 text-xs">현재 위치</button>
+      <button id="pCancel" class="py-2 rounded-lg bg-zinc-800 text-xs">취소</button>
+      <button id="pOk" class="py-2 rounded-lg bg-white text-black text-xs font-semibold">확인</button>
+    </div>
+  </div>
+</div>
+
+<div id="menu" class="hidden fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-4 space-y-3">
+    <div class="flex justify-between"><h2 class="font-bold text-sm">설정 · 데이터</h2><button id="mClose" class="text-zinc-500">✕</button></div>
+    <div class="space-y-2">
+      <label class="text-[11px] text-zinc-500">내 ID (공유 카드에 "Captured by ID"로 표시)</label>
+      <input id="idInp" maxlength="24" autocomplete="off" placeholder="예: @myname" class="inp">
+      <label class="text-[11px] text-zinc-500">Gemini API 키 (AI 자동 분석용 · 이 기기 브라우저에만 저장)</label>
+      <input id="keyInp" type="password" autocomplete="off" placeholder="AIza..." class="inp">
+      <label class="text-[11px] text-zinc-500">모델명</label>
+      <input id="modelInp" class="inp" placeholder="gemini-3.8-flash">
+      <label class="text-[11px] text-zinc-500">예비 모델 (붐비거나 실패할 때 자동 전환 · 비우면 사용 안 함)</label>
+      <input id="fbInp" class="inp" placeholder="gemini-flash-lite-latest">
+      <div class="grid grid-cols-2 gap-2">
+        <button id="keySave" class="py-2 rounded-lg bg-white text-black text-xs font-semibold">저장</button>
+        <button id="keyDel" class="py-2 rounded-lg bg-zinc-800 text-xs">키 삭제</button>
+      </div>
+      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="block text-[11px] text-zinc-400 underline">무료 API 키 발급받기 (Google AI Studio)</a>
+    </div>
+    <hr class="border-zinc-800">
+    <button id="exp" class="w-full py-2.5 rounded-xl bg-white text-black text-xs font-semibold">내 정보 내보내기 (.json)</button>
+    <label class="block w-full py-2.5 rounded-xl bg-zinc-800 text-xs text-center cursor-pointer">불러오기<input id="imp" type="file" accept=".json,application/json" class="hidden"></label>
+    <button id="reset" class="w-full py-2.5 rounded-xl bg-zinc-800 text-red-400 text-xs">전체 초기화</button>
+  </div>
+</div>
+
+<div id="share" class="hidden fixed inset-0 z-[80] bg-black/90 flex flex-col items-center justify-center p-4 gap-3">
+  <img id="shareImg" class="max-h-[72vh] rounded-xl border border-zinc-800">
+  <div class="grid grid-cols-3 gap-2 w-full max-w-xs">
+    <button id="shShare" class="py-2.5 rounded-xl bg-white text-black text-xs font-semibold">공유</button>
+    <button id="shSave" class="py-2.5 rounded-xl bg-zinc-800 text-xs">저장</button>
+    <button id="shClose" class="py-2.5 rounded-xl bg-zinc-800 text-xs">닫기</button>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const RAR={C:{l:'C',n:'흔함',c:'#71717a',c2:'#d4d4d8'},B:{l:'B',n:'보통',c:'#22c55e',c2:'#bbf7d0'},A:{l:'A',n:'우수',c:'#3b82f6',c2:'#bfdbfe'},S:{l:'S',n:'희귀',c:'#a855f7',c2:'#e9d5ff'},R:{l:'R',n:'전설',c:'#f59e0b',c2:'#fef3c7'}};
+const CATS=['전체','자동차','건물','식물','음식','물건','기타'];
+const save=()=>{try{localStorage.setItem('CapturedBy_items',JSON.stringify(items))}catch(e){alert('저장 공간이 부족합니다. 내보내기 후 일부를 삭제하세요.')}};
+
+const mig=i=>{const m={Common:'C',Rare:'A',Epic:'S',Legendary:'R'};if(m[i.rarity])i.rarity=m[i.rarity];return i};
+let items=JSON.parse(localStorage.getItem('CapturedBy_items')||'[]').map(mig);
+let filter='전체', coords={lat:37.5665,lng:126.978}, gpsOk=false;
+let draft=null, activeId=null, mainMap=null, mainMarkers=[], pickMap=null, pickMarker=null, pickCoords=null, shareBlob=null;
+
+function getGps(cb){
+  if(!navigator.geolocation){cb&&cb(false);return}
+  navigator.geolocation.getCurrentPosition(p=>{coords={lat:p.coords.latitude,lng:p.coords.longitude};gpsOk=true;cb&&cb(true)},()=>cb&&cb(false),{timeout:10000,enableHighAccuracy:true});
+}
+getGps();
+const fmtLoc=c=>`${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`;
+
+$('chips').innerHTML=CATS.map(c=>`<button data-c="${c}" class="chip whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs border"></button>`).join('');
+function paintChips(){document.querySelectorAll('.chip').forEach(b=>{const on=b.dataset.c===filter;b.textContent=b.dataset.c;b.className='chip whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs border '+(on?'bg-white text-black border-white font-semibold':'bg-zinc-900 text-zinc-400 border-zinc-800')})}
+document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{filter=b.dataset.c;render()});
+
+function render(){
+  paintChips();
+  $('total').textContent=items.length+'개';
+  if(items.length){const n={};items.forEach(i=>n[i.category]=(n[i.category]||0)+1);const t=Object.keys(n).sort((a,b)=>n[b]-n[a])[0];$('topCat').textContent=`주요 분야 · ${t} ${n[t]}개`}else $('topCat').textContent='';
+  const list=filter==='전체'?items:items.filter(i=>i.category===filter);
+  $('empty').classList.toggle('hidden',list.length>0);
+  $('grid').innerHTML='';
+  list.forEach(it=>{
+    const r=RAR[it.rarity]||RAR.C, d=document.createElement('div');
+    d.className='bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden cursor-pointer';
+    d.style.borderColor=r.c+'88';
+    d.innerHTML=`<div class="relative h-36 bg-black"><img src="${it.image}" class="w-full h-full object-cover">
+      <span class="absolute top-2 left-2 text-sm font-extrabold px-2.5 py-0.5 rounded bg-black/65" style="color:${r.c}">${r.l}</span>
+      <button class="shb absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-sm">⤴</button></div>
+      <div class="p-3"><p class="text-[10px] text-zinc-500">${esc(it.category)}</p><h4 class="font-semibold text-sm truncate">${esc(it.name)}</h4>
+      <div class="flex justify-between text-[11px] text-zinc-500 mt-2 pt-2 border-t border-zinc-800"><span class="truncate text-zinc-300">${esc(it.price)}</span><span>${esc(it.date)}</span></div></div>`;
+    d.onclick=()=>openDetail(it);
+    d.querySelector('.shb').onclick=e=>{e.stopPropagation();makeShare(it)};
+    $('grid').appendChild(d);
+  });
+}
+
+document.querySelectorAll('.nav').forEach(b=>b.onclick=()=>{
+  const t=b.dataset.tab;
+  ['tab-list','tab-map'].forEach(x=>$(x).classList.toggle('hidden',x!==t));
+  document.querySelectorAll('.nav').forEach(n=>n.className='nav '+(n===b?'text-white':'text-zinc-500'));
+  if(t==='tab-map')setTimeout(drawMainMap,100);
+});
+function drawMainMap(){
+  if(!mainMap){mainMap=L.map('mainMap').setView([coords.lat,coords.lng],13);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(mainMap)}
+  mainMap.invalidateSize();
+  mainMarkers.forEach(m=>m.remove());mainMarkers=[];
+  items.forEach(it=>{
+    const m=L.marker([it.lat,it.lng]).addTo(mainMap);
+    m.bindPopup(`<div style="width:130px"><img src="${it.image}" style="width:100%;height:80px;object-fit:cover;border-radius:6px"><b style="font-size:12px">${esc(it.name)}</b><br><span style="font-size:10px;color:#666">${esc(it.category)} · ${esc(it.price)}</span></div>`);
+    mainMarkers.push(m);
+  });
+  if(items.length)mainMap.fitBounds(items.map(i=>[i.lat,i.lng]),{padding:[40,40],maxZoom:15});
+}
+
+function openDetail(it){
+  activeId=it.id;const r=RAR[it.rarity]||RAR.C;
+  $('dImg').src=it.image;$('dName').textContent=it.name;$('dCat').textContent=it.category;
+  $('dPrice').textContent=it.price;$('dDate').textContent=it.date;$('dDesc').textContent=it.description;
+  $('dLoc').textContent='📍 '+fmtLoc(it);
+  $('dRar').textContent=r.l+' 티어 · '+r.n;$('dRar').style.background='rgba(0,0,0,.65)';$('dRar').style.color=r.c;
+  $('detail').classList.remove('hidden');
+}
+$('dClose').onclick=()=>$('detail').classList.add('hidden');
+$('detail').onclick=e=>{if(e.target.id==='detail')$('detail').classList.add('hidden')};
+$('dDel').onclick=()=>{if(confirm('삭제할까요?')){items=items.filter(i=>i.id!==activeId);save();$('detail').classList.add('hidden');render()}};
+$('dShare').onclick=()=>makeShare(items.find(i=>i.id===activeId));
+$('dEdit').onclick=()=>{const it=items.find(i=>i.id===activeId);$('detail').classList.add('hidden');openEditor({...it},false)};
+
+$('cam').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=ev=>{const img=new Image();img.onload=()=>{
+    const M=800;let w=img.width,h=img.height;const s=Math.min(1,M/Math.max(w,h));w*=s;h*=s;
+    const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
+    const d={id:Date.now().toString(),image:c.toDataURL('image/jpeg',.8),name:'',category:'기타',rarity:'C',price:'',description:'',lat:coords.lat,lng:coords.lng,date:new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit'})};
+    openEditor(d,true);
+  };img.src=ev.target.result};
+  rd.readAsDataURL(f);e.target.value='';
+};
+
+function openEditor(d,isNew){
+  draft=d;draft._new=isNew;
+  $('eTitle').textContent=isNew?'새 발견물':'발견물 수정';
+  $('ePrev').src=d.image;fillForm();
+  $('eRe').classList.toggle('hidden',false);
+  $('eStatus').textContent='';
+  $('editor').classList.remove('hidden');
+  if(isNew)analyze();
+}
+function fillForm(){
+  $('eName').value=draft.name;$('eCat').value=draft.category;$('eRar').value=draft.rarity;
+  $('ePrice').value=draft.price;$('eDesc').value=draft.description;$('eLoc').textContent=fmtLoc(draft);
+}
+const PROMPT=`사진 속 주 피사체를 도감 항목으로 분석하세요. 한국어로 답하세요.
+- name: 구체적인 명칭 (예: 포르쉐 911, 느티나무)
+- category: 자동차|건물|식물|음식|물건|기타 중 하나
+- rarity: C|B|A|S|R (C=흔함, B=보통, A=우수, S=희귀, R=매우 희귀하거나 고가인 전설급)
+- price: 원화 기준 추정 가치 문자열 (예: "약 3,000원")
+- description: 특징 2문장 이내`;
+const SCHEMA={type:'OBJECT',properties:{name:{type:'STRING'},category:{type:'STRING',enum:['자동차','건물','식물','음식','물건','기타']},rarity:{type:'STRING',enum:['C','B','A','S','R']},price:{type:'STRING'},description:{type:'STRING'}},required:['name','category','rarity','price','description']};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function callGemini(model,key){
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{method:'POST',
+    headers:{'content-type':'application/json','x-goog-api-key':key},
+    body:JSON.stringify({contents:[{parts:[{inline_data:{mime_type:'image/jpeg',data:draft.image.split(',')[1]}},{text:PROMPT}]}],generationConfig:{responseMimeType:'application/json',responseSchema:SCHEMA,temperature:0.4}})});
+  const j=await r.json().catch(()=>({}));
+  return {r,j};
+}
+function errMsg(r,j){
+  const m=j.error?.message||'';
+  if(r.status===503||/high demand|overloaded/i.test(m))return 'Google 서버가 붐비고 있어요. 잠시 후 다시 시도해주세요';
+  if(r.status===429)return '무료 사용 한도를 초과했어요. 잠시 후 다시 시도하세요';
+  if(r.status===400&&/API key/i.test(m))return 'API 키가 올바르지 않습니다';
+  if(r.status===403)return 'API 키 권한 오류입니다';
+  if(r.status===404)return '모델명을 찾을 수 없습니다 (설정에서 확인)';
+  return m||('오류 '+r.status);
+}
+async function analyze(){
+  const st=$('eStatus'),key=localStorage.getItem('CapturedBy_gkey');
+  if(!key){st.textContent='설정에서 Gemini API 키를 등록하면 자동 분석됩니다. 지금은 직접 입력해주세요.';return}
+  const main=localStorage.getItem('CapturedBy_model')||DEF_MODEL;
+  const fb=localStorage.getItem('CapturedBy_fb')??DEF_FB;
+  const models=[main];if(fb&&fb!==main)models.push(fb);
+  const spin='<span class="spin inline-block w-3 h-3 border-2 border-zinc-600 border-t-white rounded-full"></span> ';
+  $('eSave').disabled=true;
+  let last=null;
+  try{
+    outer:for(let mi=0;mi<models.length;mi++){
+      for(let t=0;t<3;t++){                       
+        st.innerHTML=spin+(mi?'예비 모델로 분석 중...':t?`서버가 붐벼 재시도 중... (${t+1}/3)`:'AI가 분석 중...');
+        let res;try{res=await callGemini(models[mi],key)}catch(e){last='네트워크 오류';await sleep(1500);continue}
+        if(res.r.ok){
+          const a=JSON.parse(res.j.candidates?.[0]?.content?.parts?.[0]?.text||'{}');
+          draft.name=a.name||'';draft.category=CATS.includes(a.category)?a.category:'기타';
+          draft.rarity=RAR[a.rarity]?a.rarity:'C';draft.price=a.price||'';draft.description=a.description||'';
+          fillForm();st.textContent='✓ 자동 분석 완료'+(mi?` (예비 모델 ${models[mi]})`:'')+' · 필요하면 직접 수정하세요';
+          last=null;break outer;
+        }
+        if(mi===0||!last)last=errMsg(res.r,res.j);
+        if([400,403].includes(res.r.status)&&/API key/i.test(res.j.error?.message||''))break outer; 
+        if(![500,502,503,504].includes(res.r.status))break;                                   
+        await sleep(1500*(t+1));
+      }
+    }
+    if(last)st.textContent='분석 실패: '+last+' · 직접 입력하거나 "AI 재분석"을 눌러주세요';
+  }catch(err){st.textContent='분석 실패: '+err.message+' · 직접 입력해주세요'}
+  $('eSave').disabled=false;
+}
+$('eRe').onclick=analyze;
+$('eClose').onclick=()=>$('editor').classList.add('hidden');
+$('eSave').onclick=()=>{
+  if(!$('eName').value.trim()){alert('이름을 입력해주세요');return}
+  Object.assign(draft,{name:$('eName').value.trim(),category:$('eCat').value,rarity:$('eRar').value,price:$('ePrice').value.trim()||'가치 미정',description:$('eDesc').value.trim()||'설명 없음'});
+  const isNew=draft._new;delete draft._new;
+  if(isNew)items.unshift(draft);else items=items.map(i=>i.id===draft.id?draft:i);
+  save();$('editor').classList.add('hidden');render();
+  if(!isNew)openDetail(draft);
+};
+
+function setPick(ll){pickCoords={lat:ll.lat,lng:ll.lng};if(pickMarker)pickMarker.setLatLng(ll);else pickMarker=L.marker(ll).addTo(pickMap)}
+$('eLocBtn').onclick=()=>{
+  $('picker').classList.remove('hidden');
+  setTimeout(()=>{
+    if(!pickMap){pickMap=L.map('pickMap');L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(pickMap);pickMap.on('click',e=>setPick(e.latlng))}
+    pickMap.invalidateSize();pickMap.setView([draft.lat,draft.lng],16);setPick({lat:draft.lat,lng:draft.lng});
+  },100);
+};
+$('pGps').onclick=()=>getGps(ok=>{if(ok){pickMap.setView([coords.lat,coords.lng],16);setPick(coords)}else alert('현재 위치를 가져올 수 없습니다')});
+$('pCancel').onclick=()=>$('picker').classList.add('hidden');
+$('pOk').onclick=()=>{draft.lat=pickCoords.lat;draft.lng=pickCoords.lng;$('eLoc').textContent=fmtLoc(draft);$('picker').classList.add('hidden')};
+
+const DEF_MODEL='gemini-3.8-flash',DEF_FB='gemini-flash-lite-latest';
+$('menuBtn').onclick=()=>{$('idInp').value=localStorage.getItem('CapturedBy_id')||'';$('keyInp').value=localStorage.getItem('CapturedBy_gkey')||'';$('modelInp').value=localStorage.getItem('CapturedBy_model')||DEF_MODEL;$('fbInp').value=localStorage.getItem('CapturedBy_fb')??DEF_FB;$('menu').classList.remove('hidden')};
+$('idInp').oninput=()=>localStorage.setItem('CapturedBy_id',$('idInp').value.trim());
+$('keySave').onclick=()=>{localStorage.setItem('CapturedBy_gkey',$('keyInp').value.trim());localStorage.setItem('CapturedBy_model',$('modelInp').value.trim()||DEF_MODEL);localStorage.setItem('CapturedBy_fb',$('fbInp').value.trim());alert('저장되었습니다')};
+$('keyDel').onclick=()=>{if(confirm('저장된 API 키를 삭제할까요?')){localStorage.removeItem('CapturedBy_gkey');$('keyInp').value=''}};
+$('mClose').onclick=()=>$('menu').classList.add('hidden');
+$('exp').onclick=()=>{
+  const b=new Blob([JSON.stringify({app:'CapturedBy',version:1,items},null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`CapturedBy-${new Date().toISOString().slice(0,10)}.json`;a.click();
+};
+$('imp').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=ev=>{try{
+    const j=JSON.parse(ev.target.result);const arr=Array.isArray(j)?j:j.items;
+    if(!Array.isArray(arr))throw 0;
+    const replace=confirm(`${arr.length}개 항목을 불러옵니다.\n[확인] 현재 데이터를 교체 / [취소] 기존 데이터에 병합`);
+    arr.forEach(mig);if(replace)items=arr;else{const ids=new Set(items.map(i=>i.id));items=[...items,...arr.filter(i=>!ids.has(i.id))]}
+    save();render();$('menu').classList.add('hidden');alert('불러오기 완료');
+  }catch(_){alert('올바른 CapturedBy 파일이 아닙니다')}};
+  rd.readAsText(f);e.target.value='';
+};
+$('reset').onclick=()=>{if(confirm('모든 데이터가 삭제됩니다. 먼저 내보내기를 권장합니다. 계속할까요?')){items=[];localStorage.removeItem('CapturedBy_items');render();$('menu').classList.add('hidden')}};
+
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+function wrap(c,t,x,y,mw,lh,max){let line='',n=0;for(const ch of t){if(c.measureText(line+ch).width>mw){c.fillText(line,x,y);y+=lh;line=ch;if(++n>=max-1)break}else line+=ch}c.fillText(line,x,y)}
+const FONT='Inter,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif';
+function fit(x,t,w){t=String(t);if(x.measureText(t).width<=w)return t;while(t.length>1&&x.measureText(t+'…').width>w)t=t.slice(0,-1);return t+'…'}
+function makeShare(it){
+  const im=new Image();
+  im.onload=()=>{
+    const W=1080,H=1920,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+    const r=RAR[it.rarity]||RAR.C;
+    const no=String(Math.max(1,items.length-items.findIndex(i=>i.id===it.id))).padStart(3,'0');
+    const ls=v=>{if('letterSpacing' in x)x.letterSpacing=v};
+    x.fillStyle='#0a0a0c';x.fillRect(0,0,W,H);
+    x.textAlign='left';x.fillStyle='#71717a';x.font='600 28px '+FONT;ls('8px');x.fillText('CapturedBy',90,225);
+    x.textAlign='right';ls('2px');x.fillText('No. '+no,W-90,225);ls('0px');
+    const px=90,py=270,pw=900,ph=820;
+    x.save();rr(x,px,py,pw,ph,36);x.clip();
+    const sc=Math.max(pw/im.width,ph/im.height),dw=im.width*sc,dh=im.height*sc;x.drawImage(im,px+(pw-dw)/2,py+(ph-dh)/2,dw,dh);x.restore();
+    x.fillStyle='rgba(10,10,12,.72)';rr(x,px+28,py+28,96,96,24);x.fill();
+    x.textAlign='center';x.fillStyle=r.c;x.font='800 64px '+FONT;x.fillText(r.l,px+76,py+97);
+    const uid=(localStorage.getItem('CapturedBy_id')||'').trim();
+    if(uid){x.textAlign='left';x.font='500 28px '+FONT;const t='Captured by ';x.fillStyle='#71717a';x.fillText(t,90,1148);const tw=x.measureText(t).width;x.fillStyle='#fafafa';x.font='600 28px '+FONT;x.fillText(fit(x,uid,900-tw),90+tw,1148)}
+    x.textAlign='left';x.fillStyle='#71717a';x.font='500 30px '+FONT;x.fillText(it.category+'  ·  '+r.n,90,1200);
+    x.fillStyle='#fafafa';x.font='700 70px '+FONT;x.fillText(fit(x,it.name,900),90,1285);
+    x.fillStyle='#27272a';x.fillRect(90,1330,900,2);
+    [['추정 가치',it.price,90],['발견 일시',it.date,560]].forEach(([k,v,sx])=>{
+      x.fillStyle='#71717a';x.font='500 26px '+FONT;x.fillText(k,sx,1392);
+      x.fillStyle='#fafafa';x.font='600 38px '+FONT;x.fillText(fit(x,v,420),sx,1444);
+    });
+    x.fillStyle='#a1a1aa';x.font='400 33px '+FONT;wrap(x,it.description,90,1535,900,50,3);
+    c.toBlob(b=>{shareBlob=b;$('shareImg').src=URL.createObjectURL(b);$('share').classList.remove('hidden')},'image/png');
+  };
+  im.src=it.image;
+}
+$('shClose').onclick=()=>$('share').classList.add('hidden');
+$('shSave').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(shareBlob);a.download='CapturedBy-card.png';a.click()};
+$('shShare').onclick=async()=>{
+  const f=new File([shareBlob],'CapturedBy-card.png',{type:'image/png'});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]})}catch(_){}}
+  else{alert('이 브라우저는 바로 공유를 지원하지 않아 이미지를 저장합니다.');$('shSave').click()}
+};
+
+render();
+</script>
+</body>
+</html>
